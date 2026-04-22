@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>テキストツリー.jp</title>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:       #028DAE;
+      --brand-light: rgba(2,141,174,0.10);
+      --brand-dark:  #015f78;
+      --bg:          #f9fbfc;
+      --surface:     #ffffff;
+      --text:        #1a1a2e;
+      --text-sub:    #555;
+      --text-muted:  #888;
+      --border:      #e2eaed;
+      --radius:      14px;
+      --shadow-sm:   0 1px 6px rgba(0,0,0,0.07);
+      --shadow-md:   0 6px 20px rgba(0,0,0,0.11);
+      --transition:  0.18s ease;
+      --output-placeholder: "← 左に文字を入力すると、ここに系統樹が現れます";
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Zen Kaku Gothic New', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      background-image:
+        linear-gradient(rgba(2,141,174,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(2,141,174,0.04) 1px, transparent 1px);
+      background-size: 28px 28px;
+      color: var(--text);
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 28px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+    header h1 span { color: var(--brand); }
+
+    .header-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    /* ── Lang tabs ── */
+    .lang-tabs {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-left: auto;
+      border: 1.5px solid var(--border);
+      border-radius: 9px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .lang-tab {
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all var(--transition);
+      font-family: 'Zen Kaku Gothic New', 'Inter', sans-serif;
+      letter-spacing: 0.2px;
+    }
+    .lang-tab:first-child { border-right: 1.5px solid var(--border); }
+    .lang-tab:hover { color: var(--brand); background: var(--brand-light); }
+    .lang-tab.active {
+      background: var(--brand);
+      color: #fff;
+    }
+
+    /* ── Main layout ── */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      height: calc(100vh - 65px);
+      overflow: hidden;
+    }
+
+    /* ── Panels ── */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      padding: 22px 24px;
+      overflow: hidden;
+    }
+    .panel-left { border-right: 1px solid var(--border); }
+
+    .panel-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .panel-label-text {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-sub);
+    }
+    .panel-badge {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 99px;
+      background: var(--brand-light);
+      color: var(--brand);
+    }
+
+    /* ── Textarea ── */
+    .input-area {
+      flex: 1;
+      width: 100%;
+      resize: none;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      font-family: 'Zen Kaku Gothic New', 'Inter', monospace;
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+      transition: border-color var(--transition), box-shadow var(--transition);
+      outline: none;
+      tab-size: 2;
+    }
+    .input-area:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(2,141,174,0.14), var(--shadow-sm);
+    }
+    .input-area::placeholder { color: var(--text-muted); opacity: 0.7; }
+
+    /* ── Options bar ── */
+    .options-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .opt-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-sub);
+      cursor: pointer;
+      padding: 5px 10px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: var(--surface);
+      transition: all var(--transition);
+      user-select: none;
+    }
+    .opt-label:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-light); }
+    .opt-label input[type="checkbox"] { accent-color: var(--brand); width: 13px; height: 13px; }
+    .opt-label.active { border-color: var(--brand); background: var(--brand-light); color: var(--brand); }
+
+    /* ── Output area ── */
+    .output-wrap { flex: 1; position: relative; overflow: hidden; }
+    .output-area {
+      width: 100%;
+      height: 100%;
+      resize: none;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      font-family: 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+      font-size: 13.5px;
+      line-height: 1.75;
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: var(--shadow-sm);
+      outline: none;
+      white-space: pre;
+      overflow: auto;
+      cursor: default;
+    }
+    .output-area:empty::before {
+      content: var(--output-placeholder);
+      color: var(--text-muted);
+      opacity: 0.6;
+      font-family: 'Zen Kaku Gothic New', sans-serif;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    /* ── Copy button ── */
+    .copy-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 8px 18px;
+      font-family: 'Zen Kaku Gothic New', 'Inter', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+      border: none;
+      border-radius: 9px;
+      cursor: pointer;
+      box-shadow: 0 1px 6px rgba(2,141,174,0.35);
+      transition: all var(--transition);
+      align-self: flex-start;
+    }
+    .copy-btn:hover { box-shadow: 0 4px 14px rgba(2,141,174,0.45); transform: translateY(-1px); }
+    .copy-btn:active { transform: translateY(0); }
+    .copy-btn.copied {
+      background: linear-gradient(135deg, #22a365, #197a4d);
+      box-shadow: 0 1px 6px rgba(34,163,101,0.35);
+    }
+
+    /* ── Hint ── */
+    .hint { margin-top: 10px; font-size: 11.5px; color: var(--text-muted); line-height: 1.6; }
+    .hint code { background: var(--brand-light); color: var(--brand); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+    /* ── Import button ── */
+    .import-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-left: auto;
+      padding: 4px 12px;
+      font-family: 'Zen Kaku Gothic New', 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--brand);
+      background: var(--brand-light);
+      border: 1.5px solid var(--brand);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .import-btn:hover { background: var(--brand); color: #fff; box-shadow: 0 2px 8px rgba(2,141,174,0.3); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(26,26,46,0.45);
+      backdrop-filter: blur(3px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; animation: fadeIn 0.15s ease; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .modal {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.18);
+      padding: 28px;
+      width: min(560px, 92vw);
+      animation: slideUp 0.2s ease;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .modal-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .modal-title { font-size: 16px; font-weight: 700; color: var(--text); }
+    .modal-title span { color: var(--brand); }
+    .modal-desc { font-size: 12.5px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.6; }
+    .modal-textarea {
+      width: 100%;
+      height: 220px;
+      resize: vertical;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-family: 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+      font-size: 13px;
+      line-height: 1.75;
+      color: var(--text);
+      background: var(--bg);
+      outline: none;
+      white-space: pre;
+      overflow: auto;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .modal-textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(2,141,174,0.13); }
+    .modal-textarea::placeholder { color: var(--text-muted); opacity: 0.6; white-space: pre-wrap; font-size: 12px; }
+    .modal-error {
+      display: none;
+      margin-top: 8px;
+      font-size: 12px;
+      color: #c0392b;
+      padding: 6px 12px;
+      background: rgba(192,57,43,0.08);
+      border-radius: 7px;
+    }
+    .modal-error.show { display: block; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    .btn-cancel {
+      padding: 8px 18px;
+      font-family: 'Zen Kaku Gothic New', 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600;
+      color: var(--text-sub);
+      background: transparent;
+      border: 1.5px solid var(--border);
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .btn-cancel:hover { border-color: var(--text-sub); }
+    .btn-load {
+      padding: 8px 22px;
+      font-family: 'Zen Kaku Gothic New', 'Inter', sans-serif;
+      font-size: 13px; font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+      border: none;
+      border-radius: 9px;
+      cursor: pointer;
+      box-shadow: 0 1px 6px rgba(2,141,174,0.35);
+      transition: all var(--transition);
+    }
+    .btn-load:hover { box-shadow: 0 4px 14px rgba(2,141,174,0.45); transform: translateY(-1px); }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    main { animation: fadeSlideIn 0.45s ease; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>テキストツリー<span>.jp</span></h1>
+  <span class="header-sub" id="headerSub">インデントで系統樹を自動生成</span>
+  <div class="lang-tabs">
+    <button class="lang-tab active" id="langJa">日本語</button>
+    <button class="lang-tab"        id="langEn">English</button>
+  </div>
+</header>
+
+<main>
+  <!-- ── LEFT PANEL ── -->
+  <div class="panel panel-left">
+    <div class="panel-label">
+      <span class="panel-label-text" id="labelInput">入力</span>
+      <span class="panel-badge"      id="badgeInput">インデントで階層指定</span>
+      <button class="import-btn" id="importOpenBtn">⬆ <span id="importBtnText">ツリーを読み込む</span></button>
+    </div>
+
+    <textarea
+      class="input-area"
+      id="inputArea"
+      spellcheck="false"
+    ></textarea>
+
+    <div class="options-bar">
+      <label class="opt-label" id="lbl-rootdot">
+        <input type="checkbox" id="opt-rootdot" checked />
+        <span id="optRootDotText">ルート「.」を表示</span>
+      </label>
+      <label class="opt-label" id="lbl-trailingslash">
+        <input type="checkbox" id="opt-trailingslash" />
+        <span id="optTrailingText">フォルダに「/」を付ける</span>
+      </label>
+      <label class="opt-label" id="lbl-ascii">
+        <input type="checkbox" id="opt-ascii" />
+        <span id="optAsciiText">ASCII文字のみ</span>
+      </label>
+    </div>
+
+    <p class="hint" id="hintText">
+      スペース・タブどちらでも対応。<code>-</code> や <code>*</code> などの箇条書きも自動除去。
+    </p>
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div class="panel panel-right">
+    <div class="panel-label">
+      <span class="panel-label-text" id="labelOutput">系統樹</span>
+      <span class="panel-badge" id="lineCount">0 行</span>
+    </div>
+
+    <div class="output-wrap">
+      <div class="output-area" id="outputArea"></div>
+    </div>
+
+    <button class="copy-btn" id="copyBtn">
+      <span class="copy-icon">📋</span>
+      <span id="copyBtnText">コピー</span>
+    </button>
+  </div>
+</main>
+
+<!-- ── Import Modal ── -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span style="font-size:20px">⬆</span>
+      <span class="modal-title" id="modalTitle">既存の系統樹を<span id="modalTitleAccent">インポート</span></span>
+    </div>
+    <p class="modal-desc" id="modalDesc">
+      既に生成済みのツリー（├──, └── などの文字を含むもの）を貼り付けてください。<br>
+      インデント形式に変換して左の編集エリアに読み込みます。
+    </p>
+    <textarea class="modal-textarea" id="importTextarea" spellcheck="false"></textarea>
+    <div class="modal-error" id="importError">ツリー文字が見つかりませんでした。正しい形式で貼り付けてください。</div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="importCancelBtn">キャンセル</button>
+      <button class="btn-load"   id="importLoadBtn">読み込む</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ────────────────────────────────────────────────
+  // i18n
+  // ────────────────────────────────────────────────
+  const T = {
+    ja: {
+      pageTitle:        'テキストツリー.jp',
+      headerSub:        'インデントで系統樹を自動生成',
+      labelInput:       '入力',
+      badgeInput:       'インデントで階層指定',
+      importBtn:        'ツリーを読み込む',
+      inputPlaceholder: '例：\nmy-project\n  src\n    index.html\n    style.css\n  package.json\n  README.md',
+      optRootDot:       'ルート「.」を表示',
+      optTrailing:      'フォルダに「/」を付ける',
+      optAscii:         'ASCII文字のみ',
+      hint:             'スペース・タブどちらでも対応。<code>-</code> や <code>*</code> などの箇条書きも自動除去。',
+      labelOutput:      '系統樹',
+      lineCount:        (n) => n + ' 行',
+      copyBtn:          'コピー',
+      copiedBtn:        'コピーしました！',
+      outputPlaceholder:'"← 左に文字を入力すると、ここに系統樹が現れます"',
+      modalTitle:       '既存の系統樹を',
+      modalTitleAccent: 'インポート',
+      modalDesc:        '既に生成済みのツリー（├──, └── などの文字を含むもの）を貼り付けてください。<br>インデント形式に変換して左の編集エリアに読み込みます。',
+      modalPlaceholder: '例：\n.\n└── my-project\n    ├── src\n    │   ├── index.html\n    │   └── style.css\n    └── package.json',
+      modalError:       'ツリー文字が見つかりませんでした。正しい形式で貼り付けてください。',
+      cancel:           'キャンセル',
+      load:             '読み込む',
+    },
+    en: {
+      pageTitle:        'TextTree.jp',
+      headerSub:        'Auto-generate trees from indented text',
+      labelInput:       'Input',
+      badgeInput:       'Indent to set depth',
+      importBtn:        'Import tree',
+      inputPlaceholder: 'e.g.:\nmy-project\n  src\n    index.html\n    style.css\n  package.json\n  README.md',
+      optRootDot:       'Show root "."',
+      optTrailing:      'Trailing slash for folders',
+      optAscii:         'ASCII chars only',
+      hint:             'Supports spaces & tabs. Bullets like <code>-</code> or <code>*</code> are stripped automatically.',
+      labelOutput:      'Tree',
+      lineCount:        (n) => n + ' lines',
+      copyBtn:          'Copy',
+      copiedBtn:        'Copied!',
+      outputPlaceholder:'"← Type text on the left to generate a tree here"',
+      modalTitle:       'Import existing ',
+      modalTitleAccent: 'tree',
+      modalDesc:        'Paste a tree containing box-drawing characters (├──, └──, etc.).<br>It will be converted to indented text and loaded into the editor.',
+      modalPlaceholder: 'e.g.:\n.\n└── my-project\n    ├── src\n    │   ├── index.html\n    │   └── style.css\n    └── package.json',
+      modalError:       'No tree characters found. Please paste a valid tree.',
+      cancel:           'Cancel',
+      load:             'Load',
+    },
+  };
+
+  let currentLang = 'ja';
+
+  function applyLang(lang) {
+    currentLang = lang;
+    const t = T[lang];
+
+    document.title = t.pageTitle;
+    document.documentElement.lang = lang;
+
+    document.getElementById('headerSub').textContent       = t.headerSub;
+    document.getElementById('labelInput').textContent      = t.labelInput;
+    document.getElementById('badgeInput').textContent      = t.badgeInput;
+    document.getElementById('importBtnText').textContent   = t.importBtn;
+    document.getElementById('inputArea').placeholder       = t.inputPlaceholder;
+    document.getElementById('optRootDotText').textContent  = t.optRootDot;
+    document.getElementById('optTrailingText').textContent = t.optTrailing;
+    document.getElementById('optAsciiText').textContent    = t.optAscii;
+    document.getElementById('hintText').innerHTML          = t.hint;
+    document.getElementById('labelOutput').textContent     = t.labelOutput;
+    document.getElementById('copyBtnText').textContent     = t.copyBtn;
+    document.getElementById('modalTitle').childNodes[0].textContent = t.modalTitle;
+    document.getElementById('modalTitleAccent').textContent = t.modalTitleAccent;
+    document.getElementById('modalDesc').innerHTML         = t.modalDesc;
+    document.getElementById('importTextarea').placeholder  = t.modalPlaceholder;
+    document.getElementById('importError').textContent     = t.modalError;
+    document.getElementById('importCancelBtn').textContent = t.cancel;
+    document.getElementById('importLoadBtn').textContent   = t.load;
+
+    // Update output placeholder via CSS variable
+    document.documentElement.style.setProperty('--output-placeholder', t.outputPlaceholder);
+
+    // Re-render line count
+    renderLineCount();
+
+    // Lang tab active state
+    document.getElementById('langJa').classList.toggle('active', lang === 'ja');
+    document.getElementById('langEn').classList.toggle('active', lang === 'en');
+  }
+
+  document.getElementById('langJa').addEventListener('click', () => applyLang('ja'));
+  document.getElementById('langEn').addEventListener('click', () => applyLang('en'));
+
+  // ────────────────────────────────────────────────
+  // Tree generation
+  // ────────────────────────────────────────────────
+  const CHARSET_UTF8 = {
+    CHILD:     '├── ',
+    LAST_CHILD:'└── ',
+    DIRECTORY: '│   ',
+    EMPTY:     '    ',
+  };
+  const CHARSET_ASCII = {
+    CHILD:     '|-- ',
+    LAST_CHILD:'`-- ',
+    DIRECTORY: '|   ',
+    EMPTY:     '    ',
+  };
+
+  function parseInput(text) {
+    const lines = text.split('\n');
+    const root = { name: '', children: [], parent: null, indentCount: -1 };
+    const stack = [root];
+    for (const line of lines) {
+      const trimmed = line.trimEnd();
+      if (!trimmed.trim()) continue;
+      const match = trimmed.match(/^(\s*)([-*•]\s*)?(.+)$/);
+      if (!match) continue;
+      const indent = match[1].replace(/\t/g, '  ').length;
+      const name   = match[3].trim();
+      const node = { name, children: [], parent: null, indentCount: indent };
+      while (stack.length > 1 && stack[stack.length - 1].indentCount >= indent) stack.pop();
+      node.parent = stack[stack.length - 1];
+      node.parent.children.push(node);
+      stack.push(node);
+    }
+    return root;
+  }
+
+  function isLastChild(node) {
+    if (!node.parent) return false;
+    const s = node.parent.children;
+    return s[s.length - 1] === node;
+  }
+
+  function generateTree(node, options, isRoot) {
+    const charset = options.ascii ? CHARSET_ASCII : CHARSET_UTF8;
+    const lines = [];
+    if (isRoot) {
+      if (options.rootDot) lines.push('.');
+      for (const child of node.children) lines.push(...generateTree(child, options, false));
+      return lines;
+    }
+    const prefixParts = [];
+    let cur = node;
+    prefixParts.unshift(isLastChild(cur) ? charset.LAST_CHILD : charset.CHILD);
+    cur = cur.parent;
+    while (cur && cur.parent) {
+      prefixParts.unshift(isLastChild(cur) ? charset.EMPTY : charset.DIRECTORY);
+      cur = cur.parent;
+    }
+    let displayName = node.name;
+    if (options.trailingSlash && node.children.length > 0 && !displayName.endsWith('/')) displayName += '/';
+    lines.push(prefixParts.join('') + displayName);
+    for (const child of node.children) lines.push(...generateTree(child, options, false));
+    return lines;
+  }
+
+  // ────────────────────────────────────────────────
+  // UI wiring
+  // ────────────────────────────────────────────────
+  const inputArea      = document.getElementById('inputArea');
+  const outputArea     = document.getElementById('outputArea');
+  const copyBtn        = document.getElementById('copyBtn');
+  const copyBtnText    = document.getElementById('copyBtnText');
+  const lineCountBadge = document.getElementById('lineCount');
+  const optRootDot     = document.getElementById('opt-rootdot');
+  const optTrailing    = document.getElementById('opt-trailingslash');
+  const optAscii       = document.getElementById('opt-ascii');
+
+  function getOptions() {
+    return { rootDot: optRootDot.checked, trailingSlash: optTrailing.checked, ascii: optAscii.checked };
+  }
+
+  function renderLineCount() {
+    const t = T[currentLang];
+    const text = outputArea.textContent;
+    const n = text ? text.split('\n').filter(l => l.length > 0).length : 0;
+    lineCountBadge.textContent = t.lineCount(n);
+  }
+
+  function render() {
+    const raw = inputArea.value;
+    if (!raw.trim()) {
+      outputArea.textContent = '';
+      renderLineCount();
+      return;
+    }
+    const root   = parseInput(raw);
+    const result = generateTree(root, getOptions(), true).join('\n');
+    outputArea.textContent = result;
+    renderLineCount();
+  }
+
+  inputArea.addEventListener('input', render);
+  optRootDot.addEventListener('change',  () => { syncOptLabel('lbl-rootdot', optRootDot); render(); });
+  optTrailing.addEventListener('change', () => { syncOptLabel('lbl-trailingslash', optTrailing); render(); });
+  optAscii.addEventListener('change',    () => { syncOptLabel('lbl-ascii', optAscii); render(); });
+
+  function syncOptLabel(id, checkbox) {
+    document.getElementById(id).classList.toggle('active', checkbox.checked);
+  }
+  syncOptLabel('lbl-rootdot', optRootDot);
+
+  inputArea.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const s = inputArea.selectionStart;
+      inputArea.value = inputArea.value.slice(0, s) + '  ' + inputArea.value.slice(inputArea.selectionEnd);
+      inputArea.selectionStart = inputArea.selectionEnd = s + 2;
+      render();
+    }
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    const text = outputArea.textContent;
+    if (!text) return;
+    const t = T[currentLang];
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    copyBtn.classList.add('copied');
+    copyBtnText.textContent = t.copiedBtn;
+    setTimeout(() => {
+      copyBtn.classList.remove('copied');
+      copyBtnText.textContent = t.copyBtn;
+    }, 2000);
+  });
+
+  // ────────────────────────────────────────────────
+  // Import: tree chars → indented text
+  // ────────────────────────────────────────────────
+  function importTree(treeText) {
+    const lines = treeText.split('\n');
+    const result = [];
+    for (const line of lines) {
+      const trimmed = line.trimEnd();
+      if (!trimmed.trim() || trimmed.trim() === '.') continue;
+      let pos = 0, depth = 0;
+      while (pos + 4 <= trimmed.length) {
+        const seg = trimmed.slice(pos, pos + 4);
+        if (seg === '\u2502   ' || seg === '    ' || seg === '|   ') {
+          depth++; pos += 4;
+        } else if (
+          seg === '\u251C\u2500\u2500 ' ||
+          seg === '\u2514\u2500\u2500 ' ||
+          seg === '|-- ' || seg === '`-- '
+        ) {
+          pos += 4; break;
+        } else { break; }
+      }
+      const name = trimmed.slice(pos).replace(/\/$/, '').trim();
+      if (name) result.push('  '.repeat(depth) + name);
+    }
+    return result.join('\n');
+  }
+
+  const importModal     = document.getElementById('importModal');
+  const importOpenBtn   = document.getElementById('importOpenBtn');
+  const importCancelBtn = document.getElementById('importCancelBtn');
+  const importLoadBtn   = document.getElementById('importLoadBtn');
+  const importTextarea  = document.getElementById('importTextarea');
+  const importError     = document.getElementById('importError');
+
+  importOpenBtn.addEventListener('click', () => {
+    importTextarea.value = '';
+    importError.classList.remove('show');
+    importModal.classList.add('open');
+    setTimeout(() => importTextarea.focus(), 80);
+  });
+  const closeModal = () => importModal.classList.remove('open');
+  importCancelBtn.addEventListener('click', closeModal);
+  importModal.addEventListener('click', (e) => { if (e.target === importModal) closeModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && importModal.classList.contains('open')) closeModal();
+  });
+  importLoadBtn.addEventListener('click', () => {
+    const raw = importTextarea.value;
+    if (!raw.trim()) { importError.classList.add('show'); return; }
+    const converted = importTree(raw);
+    if (!converted.trim()) { importError.classList.add('show'); return; }
+    inputArea.value = converted;
+    render();
+    closeModal();
+  });
+  importTextarea.addEventListener('input', () => importError.classList.remove('show'));
+
+  // ────────────────────────────────────────────────
+  // Init
+  // ────────────────────────────────────────────────
+  applyLang('ja');
+  inputArea.value =
+`my-project
+  src
+    index.html
+    style.css
+    app.js
+  public
+    favicon.ico
+    logo.png
+  package.json
+  README.md`;
+  render();
+</script>
+</body>
+</html>
